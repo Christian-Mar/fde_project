@@ -1,16 +1,12 @@
-import os
-
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
+from undercover.config import OPENROUTER_API_KEY
 
 
 def main():
-    key = os.getenv("OPENROUTER_API_KEY")
-    if key:
-        print(f"OpenRouter-key gevonden: {key[:10]}...")
+    # Controle: is de key gevonden? (de key zelf tonen we niet)
+    if OPENROUTER_API_KEY:
+        print("OpenRouter API key found")
     else:
-        print("Nog geen OPENROUTER_API_KEY in .env")
+        print("No OpenRouter API key found. Add OPENROUTER_API_KEY to the .env file")
 
 
 if __name__ == "__main__":
