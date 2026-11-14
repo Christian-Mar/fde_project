@@ -7,6 +7,7 @@ from undercover.explore import (
     print_json,
     show_claim,
 )
+from undercover.prompts import make_messages
 from undercover.schemas import ClaimDecision
 
 # TINY = True werkt met 5 claims in plaats van 25: goedkoper en sneller tijdens het testen.
@@ -70,6 +71,18 @@ def main():
     )
     print("\n--- Example ClaimDecision ---")
     print(example)
+
+    # --- De prompts ---
+
+    # 6. De messages voor de eerste claim: dit sturen we straks naar het model.
+    #    De system prompt is lang (opdracht + polisvoorwaarden), dus we tonen alleen
+    #    het begin. De user prompt tonen we volledig.
+    messages = make_messages(claims[0])
+    system, user = messages[0]["content"], messages[1]["content"]
+    print(f"\n--- System prompt ({len(system.split()):,} words), first 600 chars ---")
+    print(system[:600] + "...")
+    print(f"\n--- User prompt ({len(user.split()):,} words) ---")
+    print(user)
 
 
 if __name__ == "__main__":
