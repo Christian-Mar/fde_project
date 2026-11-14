@@ -1,5 +1,12 @@
 from undercover.config import OPENROUTER_API_KEY
 from undercover.data import get_policies, get_policy_wording, get_sample_data
+from undercover.explore import (
+    DIFFICULTY_ORDER,
+    claims_overview,
+    count_by,
+    print_json,
+    show_claim,
+)
 
 # TINY = True werkt met 5 claims in plaats van 25: goedkoper en sneller tijdens het testen.
 TINY = False
@@ -19,6 +26,33 @@ def main():
 
     print(f"{len(claims)} claims, {len(labels)} labels, {len(policies)} policies")
     print(f"The policy wording is {len(policy_wording.split()):,} words")
+
+    # --- De data verkennen ---
+
+    # 1. Eén claim zoals de klant hem indient, en de beslissing van de behandelaar erover.
+    #    Dat label gebruiken we later om de antwoorden van de modellen te controleren.
+    print("\n--- First claim ---")
+    print_json(claims[0])
+    print("\n--- Handler's decision on that claim ---")
+    print_json(labels[claims[0]["claim_id"]])
+
+    # 2. Overzicht van alle claims in één tabel.
+    data = claims_overview(claims, labels)
+    print("\n--- All claims ---")
+    print(data.to_string(index=False))
+
+    # 3. Twee bekende voorbeelden in detail. We laden hier altijd de volledige wachtrij,
+    #    want bij TINY = True zitten deze claims er misschien niet in.
+    queue, queue_labels = get_sample_data()
+    by_id = {claim["claim_id"]: claim for claim in queue}
+    for claim_id in ["CLM-1015", "CLM-1010"]:
+        show_claim(by_id[claim_id], queue_labels[claim_id])
+
+    # 4. Aantallen per claimtype en per moeilijkheid, gesplitst naar beslissing.
+    print("\n--- Claims by type ---")
+    print(count_by(data, "claim_type"))
+    print("\n--- Claims by difficulty ---")
+    print(count_by(data, "difficulty").reindex(DIFFICULTY_ORDER + ["total"]))
 
 
 if __name__ == "__main__":

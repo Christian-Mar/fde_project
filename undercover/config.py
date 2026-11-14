@@ -3,7 +3,7 @@
 import os  # omgevingsvariabelen lezen, zoals OPENROUTER_API_KEY
 
 from dotenv import load_dotenv  # laadt de variabelen uit het .env-bestand in os.environ
-from openai import OpenAI  # OpenAI-client; werkt ook met OpenRouter via een andere base_url
+from openai import OpenAI  # OpenAI-client; werkt ook met OpenRouter
 
 # Lees .env in. override=True: waarden uit .env winnen van wat al in je shell staat.
 load_dotenv(override=True)

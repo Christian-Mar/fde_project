@@ -32,7 +32,9 @@ def get_sample_data(tiny=False, held_out=False):
                (handig om goedkoop en snel te testen).
     """
     claims = load("evals/held_out_claims.json" if held_out else "claims.json")
-    decisions = load("evals/held_out_decisions.json" if held_out else "evals/decisions.json")
+    decisions = load(
+        "evals/held_out_decisions.json" if held_out else "evals/decisions.json"
+    )
 
     if tiny:
         # Een set (de {...}) met de claim_ids die tiny zijn; daarmee filteren we beide lijsten.
