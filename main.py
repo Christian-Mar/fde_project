@@ -7,11 +7,17 @@ from undercover.explore import (
     print_json,
     show_claim,
 )
+from undercover.llm import decide
 from undercover.prompts import make_messages
 from undercover.schemas import ClaimDecision
 
 # TINY = True werkt met 5 claims in plaats van 25: goedkoper en sneller tijdens het testen.
 TINY = False
+
+# Welk model de claims beoordeelt, en hoe lang het mag nadenken ("low", "medium", "high").
+# Andere modellen vind je op https://openrouter.ai/models (naam in de vorm aanbieder/model).
+MODEL = "openai/gpt-6-luna"
+EFFORT = "low"
 
 
 def main():
@@ -83,6 +89,16 @@ def main():
     print(system[:600] + "...")
     print(f"\n--- User prompt ({len(user.split()):,} words) ---")
     print(user)
+
+    # --- Het model aanroepen ---
+
+    # 7. Eén claim laten beoordelen door één model. Dit kost echt geld (een fractie
+    #    van een cent). Vergelijk het antwoord met de beslissing van de behandelaar.
+    first = decide(claims[0], MODEL, EFFORT)
+    label = labels[claims[0]["claim_id"]]
+    print(f"\n--- {MODEL} at {EFFORT} on {claims[0]['claim_id']} ---")
+    print_json(first)
+    print(f"\nHandler: {label['decision']} ${label['payout']:,.2f}")
 
 
 if __name__ == "__main__":
