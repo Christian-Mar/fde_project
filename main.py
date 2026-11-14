@@ -1,6 +1,6 @@
 from undercover.config import OPENROUTER_API_KEY
 from undercover.data import get_policies, get_policy_wording, get_sample_data
-from undercover.evaluate import run
+from undercover.evaluate import cost_summary, run, score_by_difficulty, show_misses
 from undercover.explore import (
     DIFFICULTY_ORDER,
     claims_overview,
@@ -19,6 +19,14 @@ TINY = False
 # Andere modellen vind je op https://openrouter.ai/models (naam in de vorm aanbieder/model).
 MODEL = "openai/gpt-6-luna"
 EFFORT = "low"
+
+# De experimenten voor de evaluatie (stap 8): elk paar (model, effort) beoordeelt alle
+# claims. Haal het # weg om een experiment toe te voegen; elk experiment kost geld.
+EXPERIMENTS = [
+    (MODEL, EFFORT),
+    # ("openai/gpt-6-luna", "medium"),
+    # ("google/gemini-3.5-flash-lite", "low"),
+]
 
 
 def main():
@@ -103,13 +111,30 @@ def main():
 
     # --- Evalueren ---
 
-    # 8. Alle claims door hetzelfde model en dezelfde effort, met de score erbij.
-    #    Dit kost ongeveer 25 keer zoveel als stap 7 (bij Luna op low ca. een cent).
-    #    Wil je modellen vergelijken? Roep run() meerdere keren aan, bv.:
-    #    run("openai/gpt-6-luna", "medium", claims, labels)
-    #    run("google/gemini-3.5-flash-lite", "low", claims, labels)
+    # 8. Elk experiment uit EXPERIMENTS: alle claims door dat model op die effort.
+    #    Eén run met Luna op low kost ca. een halve cent.
     print("\n--- Evaluation ---")
-    run(MODEL, EFFORT, claims, labels)
+    runs = {}  # (model, effort) -> lijst met resultaten van die run
+    for model, effort in EXPERIMENTS:
+        runs[(model, effort)] = run(model, effort, claims, labels)
+
+    # Alle resultaten in één lijst, zodat de tabellen per (model, effort) groeperen.
+    all_results = [result for results in runs.values() for result in results]
+
+    # --- De resultaten bekijken ---
+
+    # 9. Score per moeilijkheid. Verwacht bij "manual" bijna niets goed.
+    print("\n--- Right by difficulty ---")
+    print(score_by_difficulty(all_results))
+
+    # 10. Waar ging het fout, en waarom? Voor het eerste experiment.
+    model, effort = EXPERIMENTS[0]
+    print(f"\n--- Misses for {model} at {effort} ---")
+    show_misses(runs[(model, effort)], labels)
+
+    # 11. Juist, kosten en tijd per experiment, voor de hele set.
+    print("\n--- Right, cost and seconds ---")
+    print(cost_summary(all_results))
 
 
 if __name__ == "__main__":

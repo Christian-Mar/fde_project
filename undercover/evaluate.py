@@ -6,6 +6,8 @@ Omdat de set telkens hetzelfde is, kun je modellen, reasoning efforts en prompts
 eerlijk met elkaar vergelijken: op juistheid, kosten en snelheid.
 """
 
+import pandas as pd  # resultaten in tabellen zetten, groeperen en optellen
+
 from undercover.llm import decide
 
 
@@ -56,3 +58,57 @@ def run(model, effort, claims, labels):
         f"for ${cost:.4f} in {seconds:.0f} seconds"
     )
     return results
+
+
+# --- De resultaten bekijken ---
+#
+# De functies hieronder krijgen de resultaten van één of meer runs, samengevoegd
+# in één lijst, bv. luna_low + gemini. Elke rij heeft "model" en "effort", dus
+# pandas kan per combinatie groeperen.
+
+
+def score_by_difficulty(results):
+    """Tel per model en effort hoeveel claims juist zijn, per moeilijkheid.
+
+    pivot_table maakt een kruistabel: rijen = (model, effort), kolommen = difficulty,
+    cellen = som van "right" (True telt als 1). Verwacht bij "manual" bijna niets:
+    die claims hangen af van informatie die het model niet krijgt.
+    """
+    return pd.DataFrame(results).pivot_table(
+        index=["model", "effort"],
+        columns="difficulty",
+        values="right",
+        aggfunc="sum",
+        sort=False,  # volgorde van de runs aanhouden
+    )
+
+
+def cost_summary(results):
+    """Tel per model en effort het aantal juiste claims, de kosten en de tijd op.
+
+    Dit zijn de drie cijfers die een klant wil weten: hoe goed, hoe duur, hoe snel.
+    """
+    return (
+        pd.DataFrame(results)
+        .groupby(["model", "effort"], sort=False)[["right", "cost", "seconds"]]
+        .sum()
+    )
+
+
+def show_misses(results, labels):
+    """Toon elke claim die het model fout had, met de uitleg van model en behandelaar.
+
+    Zo zie je WAAROM het misging. Het veld "tests" in het label zegt wat de claim
+    eigenlijk test, bv. een uitsluiting of een ontbrekend document.
+    """
+    for result in results:
+        if not result["right"]:
+            label = labels[result["claim_id"]]
+            print(
+                f"\n{result['claim_id']} ({label['difficulty']}): "
+                f"model {result['decision']} ${result['payout']:,.2f}, "
+                f"handler {label['decision']} ${label['payout']:,.2f}"
+            )
+            print(f"- Model:   {result['rationale']}")
+            print(f"- Handler: {label['reason']}")
+            print(f"- Tests:   {label['tests']}")
