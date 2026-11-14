@@ -1,5 +1,6 @@
 from undercover.config import OPENROUTER_API_KEY
 from undercover.data import get_policies, get_policy_wording, get_sample_data
+from undercover.evaluate import run
 from undercover.explore import (
     DIFFICULTY_ORDER,
     claims_overview,
@@ -99,6 +100,16 @@ def main():
     print(f"\n--- {MODEL} at {EFFORT} on {claims[0]['claim_id']} ---")
     print_json(first)
     print(f"\nHandler: {label['decision']} ${label['payout']:,.2f}")
+
+    # --- Evalueren ---
+
+    # 8. Alle claims door hetzelfde model en dezelfde effort, met de score erbij.
+    #    Dit kost ongeveer 25 keer zoveel als stap 7 (bij Luna op low ca. een cent).
+    #    Wil je modellen vergelijken? Roep run() meerdere keren aan, bv.:
+    #    run("openai/gpt-6-luna", "medium", claims, labels)
+    #    run("google/gemini-3.5-flash-lite", "low", claims, labels)
+    print("\n--- Evaluation ---")
+    run(MODEL, EFFORT, claims, labels)
 
 
 if __name__ == "__main__":
