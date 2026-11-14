@@ -1,3 +1,15 @@
+"""Startpunt van het programma. Kies wat je wilt draaien met een commando:
+
+    uv run main.py explore   de data, het schema en de prompts bekijken (gratis)
+    uv run main.py llm       de claims laten beoordelen met één LLM-aanroep per claim
+    uv run main.py agent     de claims laten beoordelen door een agent met tools
+
+llm en agent roepen echte modellen aan en kosten dus (een beetje) geld.
+"""
+
+import sys  # sys.argv: de woorden die je na "main.py" typt
+
+from undercover.agent import decide_with_agent, invoke_agent, make_agent
 from undercover.config import OPENROUTER_API_KEY
 from undercover.data import get_policies, get_policy_wording, get_sample_data
 from undercover.evaluate import cost_summary, run, score_by_difficulty, show_misses
@@ -20,31 +32,27 @@ TINY = False
 MODEL = "openai/gpt-6-luna"
 EFFORT = "low"
 
-# De experimenten voor de evaluatie (stap 8): elk paar (model, effort) beoordeelt alle
-# claims. Haal het # weg om een experiment toe te voegen; elk experiment kost geld.
+# De experimenten voor "llm": elk paar (model, effort) beoordeelt alle claims.
+# Haal het # weg om een experiment toe te voegen; elk experiment kost geld.
 EXPERIMENTS = [
     (MODEL, EFFORT),
     # ("openai/gpt-6-luna", "medium"),
     # ("google/gemini-3.5-flash-lite", "low"),
 ]
 
+# Het model voor "agent". Standaard hetzelfde als MODEL, zodat je de agent eerlijk
+# kunt vergelijken met de gewone LLM-aanroep. Opdracht uit de les: wat is het
+# goedkoopste model waarmee de agent steeds minstens 15 van de 25 haalt?
+AGENT_MODEL = MODEL
+AGENT_EFFORT = EFFORT
 
-def main():
-    # Controle: is de key gevonden? (de key zelf tonen we niet)
-    if OPENROUTER_API_KEY:
-        print("OpenRouter API key found")
-    else:
-        print("No OpenRouter API key found. Add OPENROUTER_API_KEY to the .env file")
 
-    # De data laden en kort samenvatten.
-    claims, labels = get_sample_data(tiny=TINY)
+def explore(claims, labels):
+    """De data, het antwoordformaat en de prompts bekijken. Roept geen model aan."""
     policies = get_policies()
     policy_wording = get_policy_wording()
-
     print(f"{len(claims)} claims, {len(labels)} labels, {len(policies)} policies")
     print(f"The policy wording is {len(policy_wording.split()):,} words")
-
-    # --- De data verkennen ---
 
     # 1. Eén claim zoals de klant hem indient, en de beslissing van de behandelaar erover.
     #    Dat label gebruiken we later om de antwoorden van de modellen te controleren.
@@ -71,25 +79,12 @@ def main():
     print("\n--- Claims by difficulty ---")
     print(count_by(data, "difficulty").reindex(DIFFICULTY_ORDER + ["total"]))
 
-    # --- Het antwoordformaat (Structured Outputs) ---
-
     # 5. Het JSON-schema dat Pydantic maakt van ClaimDecision. Dit is wat het model
-    #    straks meekrijgt als beschrijving van het antwoord dat we verwachten.
+    #    meekrijgt als beschrijving van het antwoord dat we verwachten.
     print("\n--- JSON schema for ClaimDecision ---")
     print_json(ClaimDecision.model_json_schema())
 
-    # Zo ziet een geldig antwoord eruit als Python-object (hier met de hand gemaakt).
-    example = ClaimDecision(
-        rationale="Example only: the airline canceled the flight and the delay is covered.",
-        decision="approve",
-        payout=420.0,
-    )
-    print("\n--- Example ClaimDecision ---")
-    print(example)
-
-    # --- De prompts ---
-
-    # 6. De messages voor de eerste claim: dit sturen we straks naar het model.
+    # 6. De messages voor de eerste claim: dit sturen we naar het model.
     #    De system prompt is lang (opdracht + polisvoorwaarden), dus we tonen alleen
     #    het begin. De user prompt tonen we volledig.
     messages = make_messages(claims[0])
@@ -99,42 +94,80 @@ def main():
     print(f"\n--- User prompt ({len(user.split()):,} words) ---")
     print(user)
 
-    # --- Het model aanroepen ---
 
-    # 7. Eén claim laten beoordelen door één model. Dit kost echt geld (een fractie
-    #    van een cent). Vergelijk het antwoord met de beslissing van de behandelaar.
+def show_results(all_results, labels, misses_of):
+    """De drie resultaattabellen: per moeilijkheid, de fouten, en juist/kosten/tijd."""
+    print("\n--- Right by difficulty ---")
+    print(score_by_difficulty(all_results))
+
+    print("\n--- Misses ---")
+    show_misses(misses_of, labels)
+
+    print("\n--- Right, cost and seconds ---")
+    print(cost_summary(all_results))
+
+
+def llm(claims, labels):
+    """De claims laten beoordelen met één LLM-aanroep per claim (Structured Outputs)."""
+    # 7. Eén claim laten beoordelen, en het antwoord naast dat van de behandelaar zetten.
     first = decide(claims[0], MODEL, EFFORT)
     label = labels[claims[0]["claim_id"]]
     print(f"\n--- {MODEL} at {EFFORT} on {claims[0]['claim_id']} ---")
     print_json(first)
     print(f"\nHandler: {label['decision']} ${label['payout']:,.2f}")
 
-    # --- Evalueren ---
-
     # 8. Elk experiment uit EXPERIMENTS: alle claims door dat model op die effort.
-    #    Eén run met Luna op low kost ca. een halve cent.
     print("\n--- Evaluation ---")
-    runs = {}  # (model, effort) -> lijst met resultaten van die run
-    for model, effort in EXPERIMENTS:
-        runs[(model, effort)] = run(model, effort, claims, labels)
+    runs = [run(model, effort, claims, labels) for model, effort in EXPERIMENTS]
 
-    # Alle resultaten in één lijst, zodat de tabellen per (model, effort) groeperen.
-    all_results = [result for results in runs.values() for result in results]
+    # 9-11. De resultaten, met de fouten van het eerste experiment.
+    all_results = [result for results in runs for result in results]
+    show_results(all_results, labels, misses_of=runs[0])
 
-    # --- De resultaten bekijken ---
 
-    # 9. Score per moeilijkheid. Verwacht bij "manual" bijna niets goed.
-    print("\n--- Right by difficulty ---")
-    print(score_by_difficulty(all_results))
+def agent(claims, labels):
+    """De claims laten beoordelen door een agent die tools gebruikt."""
+    # 12. Eén claim, met alle berichten van de lus. Zo zie je hoe een agent werkt:
+    #     het model vraagt de polis op (tool call), krijgt hem terug (tool message),
+    #     slaat zijn beslissing op (tool call) en sluit af met een kort bericht.
+    print(
+        f"\n--- Agent with {AGENT_MODEL} at {AGENT_EFFORT} on {claims[0]['claim_id']} ---"
+    )
+    messages = invoke_agent(make_agent(AGENT_MODEL, AGENT_EFFORT), claims[0])
+    for message in messages[1:]:  # [1:] slaat het eerste bericht (de claim) over
+        message.pretty_print()
 
-    # 10. Waar ging het fout, en waarom? Voor het eerste experiment.
-    model, effort = EXPERIMENTS[0]
-    print(f"\n--- Misses for {model} at {effort} ---")
-    show_misses(runs[(model, effort)], labels)
+    # 13. De hele set: de agent naast de gewone LLM-aanroep met hetzelfde model.
+    #     Zo zie je wat de agent-aanpak oplevert of kost. Per claim doet de agent
+    #     drie modelaanroepen, dus reken op ongeveer drie keer de kosten.
+    print("\n--- Evaluation ---")
+    llm_results = run(AGENT_MODEL, AGENT_EFFORT, claims, labels)
+    agent_results = run(
+        AGENT_MODEL, AGENT_EFFORT, claims, labels, decide_fn=decide_with_agent
+    )
 
-    # 11. Juist, kosten en tijd per experiment, voor de hele set.
-    print("\n--- Right, cost and seconds ---")
-    print(cost_summary(all_results))
+    # 14. De resultaten, met de fouten van de agent.
+    show_results(llm_results + agent_results, labels, misses_of=agent_results)
+
+
+# De commando's die je kunt kiezen, met de functie die erbij hoort.
+COMMANDS = {"explore": explore, "llm": llm, "agent": agent}
+
+
+def main():
+    # sys.argv is de lijst met woorden op de commandoregel: ["main.py", "agent"].
+    command = sys.argv[1] if len(sys.argv) > 1 else None
+    if command not in COMMANDS:
+        print(__doc__)  # de uitleg bovenaan dit bestand
+        return
+
+    # Controle: is de key gevonden? (de key zelf tonen we niet)
+    if not OPENROUTER_API_KEY:
+        print("No OpenRouter API key found. Add OPENROUTER_API_KEY to the .env file")
+        return
+
+    claims, labels = get_sample_data(tiny=TINY)
+    COMMANDS[command](claims, labels)
 
 
 if __name__ == "__main__":

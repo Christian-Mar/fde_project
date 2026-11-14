@@ -24,15 +24,20 @@ def is_right(answer, label):
     )
 
 
-def run(model, effort, claims, labels):
+def run(model, effort, claims, labels, decide_fn=decide):
     """Laat het model elke claim beoordelen en controleer elk antwoord met het label.
 
-    Geeft een lijst met één dict per claim terug: het antwoord van decide(), plus de
+    decide_fn is de functie die één claim beoordeelt. Standaard is dat decide() uit
+    llm.py (één LLM-aanroep). Geef decide_with_agent uit agent.py mee om de agent
+    op exact dezelfde manier te evalueren. Dat kan omdat beide functies dezelfde
+    argumenten krijgen en hetzelfde soort dict teruggeven.
+
+    Geeft een lijst met één dict per claim terug: het antwoord van decide_fn, plus de
     moeilijkheid van de claim en of het antwoord juist is ("right").
     """
     results = []
     for claim in claims:
-        answer = decide(claim, model, effort)
+        answer = decide_fn(claim, model, effort)
         label = labels[claim["claim_id"]]
 
         # {**answer, ...} maakt een nieuwe dict: alle velden van answer, met twee
@@ -53,8 +58,9 @@ def run(model, effort, claims, labels):
     right = sum(result["right"] for result in results)
     cost = sum(result["cost"] for result in results)
     seconds = sum(result["seconds"] for result in results)
+    technique = results[0]["technique"]  # "LLM" of "Agent"
     print(
-        f"{model} at {effort}: {right} of {len(results)} right "
+        f"{model} at {effort} ({technique}): {right} of {len(results)} right "
         f"for ${cost:.4f} in {seconds:.0f} seconds"
     )
     return results
@@ -63,8 +69,8 @@ def run(model, effort, claims, labels):
 # --- De resultaten bekijken ---
 #
 # De functies hieronder krijgen de resultaten van één of meer runs, samengevoegd
-# in één lijst, bv. luna_low + gemini. Elke rij heeft "model" en "effort", dus
-# pandas kan per combinatie groeperen.
+# in één lijst, bv. luna_low + gemini. Elke rij heeft "model", "effort" en
+# "technique" (LLM of Agent), dus pandas kan per combinatie groeperen.
 
 
 def score_by_difficulty(results):
@@ -75,7 +81,7 @@ def score_by_difficulty(results):
     die claims hangen af van informatie die het model niet krijgt.
     """
     return pd.DataFrame(results).pivot_table(
-        index=["model", "effort"],
+        index=["model", "effort", "technique"],
         columns="difficulty",
         values="right",
         aggfunc="sum",
@@ -90,7 +96,9 @@ def cost_summary(results):
     """
     return (
         pd.DataFrame(results)
-        .groupby(["model", "effort"], sort=False)[["right", "cost", "seconds"]]
+        .groupby(["model", "effort", "technique"], sort=False)[
+            ["right", "cost", "seconds"]
+        ]
         .sum()
     )
 

@@ -65,3 +65,24 @@ def make_messages(claim):
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": make_user_prompt(claim)},
     ]
+
+
+# --- Prompts voor de agent (deel 4) ---
+#
+# De agent krijgt dezelfde opdracht en polisvoorwaarden, met één verschil: hij krijgt
+# de polis van de klant NIET in de prompt. Die moet hij zelf opzoeken met de tool
+# get_policy, en zijn beslissing slaat hij op met de tool record_decision.
+
+AGENT_SYSTEM_PROMPT = f"""{INSTRUCTIONS}
+Use your tools to look up the customer's policy record and to record your decision.
+
+{POLICY_WORDING}
+"""
+
+
+def make_claim_prompt(claim):
+    """Alleen de claim, als JSON. De agent zoekt de polis zelf op via policy_id."""
+    return f"""# Claim
+
+{json.dumps(claim, indent=2)}
+"""
