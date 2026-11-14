@@ -7,6 +7,7 @@ from undercover.explore import (
     print_json,
     show_claim,
 )
+from undercover.schemas import ClaimDecision
 
 # TINY = True werkt met 5 claims in plaats van 25: goedkoper en sneller tijdens het testen.
 TINY = False
@@ -53,6 +54,22 @@ def main():
     print(count_by(data, "claim_type"))
     print("\n--- Claims by difficulty ---")
     print(count_by(data, "difficulty").reindex(DIFFICULTY_ORDER + ["total"]))
+
+    # --- Het antwoordformaat (Structured Outputs) ---
+
+    # 5. Het JSON-schema dat Pydantic maakt van ClaimDecision. Dit is wat het model
+    #    straks meekrijgt als beschrijving van het antwoord dat we verwachten.
+    print("\n--- JSON schema for ClaimDecision ---")
+    print_json(ClaimDecision.model_json_schema())
+
+    # Zo ziet een geldig antwoord eruit als Python-object (hier met de hand gemaakt).
+    example = ClaimDecision(
+        rationale="Example only: the airline canceled the flight and the delay is covered.",
+        decision="approve",
+        payout=420.0,
+    )
+    print("\n--- Example ClaimDecision ---")
+    print(example)
 
 
 if __name__ == "__main__":
